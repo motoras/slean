@@ -1,2 +1,2 @@
-# bytelane
-Elegant, flexible and lean request reply library for rust
+# sleam 
+Elegant, flexible *slim and lean* request reply library for rust
