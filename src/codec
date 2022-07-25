@@ -1,0 +1,13 @@
+use std::io::Read;
+use std::io::Write;
+
+pub trait Codec<T>{
+  fn decode<IN:Read>(&mut input:IN)->T;
+
+  fn encoding_len(&self)->Some(u32){
+    None; 
+  }
+  fn encode<OUT:Write>(&self,out:&mut OUT);
+}
+
+

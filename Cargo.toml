@@ -6,14 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+log = "0.4.6"
+thiserror="1.0.31"
 mio = {"version"="0.8.4", features = ["net","os-poll"]}
 socket2={"version"="0.4.4", features=["all"]}
+
 slab = "0.4.6"
-log = "0.4.6"
 crossbeam="0.8.1"
 byteorder="1.4.3"
 rand="0.8.5"
 ctrlc="3.2.2"
+bytes="1.2.0"
 
 
 
