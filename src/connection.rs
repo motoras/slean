@@ -1,44 +1,48 @@
-use byteorder::{ByteOrder, NetworkEndian};
+use byteorder::{ByteOrder, LittleEndian, NetworkEndian};
 use log::*;
 use mio::net::TcpStream;
 use mio::Token;
 
 use std::io::{Error, ErrorKind, Read};
 
-use crate::memo::MemoryPool;
+use crate::memo::TcpWriteBuff;
+use crate::service::ReplService;
 
-pub struct Connection<'a> {
+pub struct Connection<'a, S: ReplService> {
     token: Token,
-    stream: TcpStream,
+    pub(crate) stream: TcpStream,
+    service: &'a S,
     pending_read: u32,
-    buffer: Option<Box<&'a [u8]>>,
+    buffer: Vec<u8>,
     buffer_pos: usize,
 }
 
-impl<'a> Connection<'a> {
-    pub fn new(token: Token, stream: TcpStream) -> Self {
+impl<'a, S: ReplService> Connection<'a, S> {
+    pub fn new(token: Token, stream: TcpStream, service: &'a S) -> Self {
         Connection {
             token,
             stream,
+            service,
             pending_read: 0,
-            buffer: None,
+            buffer: Vec::with_capacity(0),
             buffer_pos: 0,
         }
     }
-    pub fn on_read<T: MemoryPool>(&mut self, mem_pool: &'a mut T) -> Result<u32, Error> {
+    pub fn on_read(&mut self, write_buff: &mut TcpWriteBuff) -> Result<u32, Error> {
+        //info!("Reading message");
         let mut bytes_read = 0;
         if self.pending_read > 0 {
             let left_to_read = self.pending_read;
             match self.read_msg() {
                 Ok(_) => {
                     bytes_read += left_to_read;
-                    //we got message
-                    //maybe decode first??
-                    //on_message(&self.buffer, &self.stream);
+                    self.service
+                        .execute(&mut &self.buffer[..], write_buff)
+                        .unwrap();
+                    write_buff.send(&mut self.stream).unwrap();
+                    self.buffer = Vec::with_capacity(0);
                     self.pending_read = 0;
                     self.buffer_pos = 0;
-                    mem_pool.put(self.buffer.unwrap());
-                    self.buffer = None;
                 }
                 Err(err) => match err.kind() {
                     ErrorKind::WouldBlock => return Ok(left_to_read - self.pending_read),
@@ -46,43 +50,54 @@ impl<'a> Connection<'a> {
                 },
             }
         }
-
+        // self.read_message_length()?;
+        // Ok(4)
         loop {
             let msg_len = self.read_message_length()?;
             if msg_len == 0 {
                 return Ok(0);
             }
             let left_to_read = self.pending_read;
-            self.buffer = mem_pool.take(msg_len);
-            if self.buffer.is_none() {
-                //discard message
-                //tell the client you are temporarely unavailable due to memory shortage, and ask him to try later
-                return Ok(0);
-            }
-            match self.read_msg() {
-                Ok(_) => {
-                    bytes_read += left_to_read;
-                    //we got message
-                    //maybe decode first??
-                    //on_message(&self.buffer, &self.stream);
-                    self.pending_read = 0;
-                    self.buffer_pos = 0;
-                    mem_pool.put(self.buffer.unwrap());
-                    self.buffer = None;
+            //info!("Message len is {}", left_to_read);
+            self.buffer = Vec::with_capacity(msg_len as usize);
+            self.buffer.resize(msg_len as usize, 0);
+            // if self.buffer.is_none() {
+            //     //discard message
+            //     //tell the client you are temporarely unavailable due to memory shortage, and ask him to try later
+            //     return Ok(0);
+            // }
+            while self.pending_read > 0 {
+                match self.read_msg() {
+                    Ok(_) => {
+                        bytes_read += left_to_read;
+                    }
+                    Err(err) => match err.kind() {
+                        ErrorKind::WouldBlock => return Ok(left_to_read - self.pending_read),
+                        _ => return Err(err),
+                    },
                 }
-                Err(err) => match err.kind() {
-                    ErrorKind::WouldBlock => return Ok(left_to_read - self.pending_read),
-                    _ => return Err(err),
-                },
             }
+            //we got message
+            //info!("Message Read");
+            self.service
+                .execute(&mut &self.buffer[..], write_buff)
+                .unwrap();
+            //info!("Sending reply....");
+            write_buff.send(&mut self.stream).unwrap();
+            //info!("Reply send ....");
+            self.buffer = Vec::with_capacity(0);
+            self.pending_read = 0;
+            self.buffer_pos = 0;
         }
     }
 
     fn read_msg(&mut self) -> Result<(), Error> {
-        assert!(self.buffer.is_some());
-        let buffer = self.buffer.unwrap();
+        assert!(!self.buffer.is_empty());
         while self.pending_read > 0 {
-            match self.stream.read(&mut buffer[self.buffer_pos as usize..]) {
+            match self.stream.read(
+                &mut self.buffer
+                    [self.buffer_pos as usize..self.buffer_pos + self.pending_read as usize],
+            ) {
                 Ok(n) => {
                     assert!(self.pending_read >= n as u32);
                     self.pending_read -= n as u32;
@@ -93,7 +108,7 @@ impl<'a> Connection<'a> {
                     ErrorKind::Interrupted => {
                         continue;
                     }
-                    _ => return Err(err),
+                    _ => return Err(err), //Would Block is handle at a higher level
                 },
             }
         }
@@ -119,7 +134,7 @@ impl<'a> Connection<'a> {
             return Err(Error::new(ErrorKind::InvalidData, "Invalid message length"));
         }
 
-        self.pending_read = NetworkEndian::read_u32(buf.as_ref());
+        self.pending_read = LittleEndian::read_u32(buf.as_ref());
         Ok(self.pending_read)
     }
 }

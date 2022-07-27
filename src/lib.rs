@@ -1,4 +1,5 @@
 mod connection;
 mod error;
-mod memo;
-mod repl;
+pub mod memo;
+pub mod repl;
+pub mod service;
