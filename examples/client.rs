@@ -12,7 +12,7 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     let mut handles = Vec::new();
-    for _i in 0..4 {
+    for _i in 0..64 {
         handles.push(std::thread::spawn(|| run_client()));
     }
     for handle in handles {
@@ -31,7 +31,7 @@ fn run_client() {
         duration,
     ) {
         Ok(mut stream) => {
-            for _i in 0..1_000_000 / 2 {
+            for _i in 0..1_000_00 / 2 {
                 //info!("Sending request  {:?}", add_req);
                 MsgPackCodec::write(&add_req, &mut write_buf).unwrap();
                 write_buf.send(&mut stream).unwrap();
@@ -40,7 +40,7 @@ fn run_client() {
                 let res: CalcReply = MsgPackCodec::read(&mut &read_buf[0..len as usize]).unwrap();
                 debug!("Got reply {:?}", res);
             }
-            for _i in 0..1_000_000 / 2 {
+            for _i in 0..1_000_00 / 2 {
                 //info!("Sending request  {:?}", add_req);
                 MsgPackCodec::write(&mul_req, &mut write_buf).unwrap();
                 write_buf.send(&mut stream).unwrap();

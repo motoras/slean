@@ -9,7 +9,6 @@ use crate::memo::TcpWriteBuff;
 use crate::service::ReplService;
 
 pub struct Connection<'a, S: ReplService> {
-    token: Token,
     pub(crate) stream: TcpStream,
     service: &'a S,
     pending_read: u32,
@@ -18,9 +17,8 @@ pub struct Connection<'a, S: ReplService> {
 }
 
 impl<'a, S: ReplService> Connection<'a, S> {
-    pub fn new(token: Token, stream: TcpStream, service: &'a S) -> Self {
+    pub fn new(stream: TcpStream, service: &'a S) -> Self {
         Connection {
-            token,
             stream,
             service,
             pending_read: 0,

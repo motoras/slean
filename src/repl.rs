@@ -73,7 +73,7 @@ impl<RS: ReplService> ReplServer<RS> {
                                 crt_token += 1;
                                 poll.registry()
                                     .register(&mut stream, token, Interest::READABLE)?;
-                                let connection = Connection::new(token, stream, &self.service);
+                                let connection = Connection::new(stream, &self.service);
                                 connections.insert(token, connection);
                                 info!("Connection registered: {} {:?}", address, &token);
                             }
