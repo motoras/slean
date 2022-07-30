@@ -8,12 +8,10 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use log::{error, trace};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::io::Error as IoError;
-use std::io::ErrorKind;
 use std::marker::PhantomData;
 use std::net::TcpStream;
 use std::time::Duration;
-use std::{io::Read, io::Write};
+
 pub struct BlockingSleamService<Req, Repl>
 where
     Req: Serialize,

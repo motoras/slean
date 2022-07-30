@@ -25,8 +25,8 @@ fn run_client() {
 
     for _i in 0..1_000_000 / 2 {
         service.send(&add_req).unwrap();
-        let res: CalcReply = service.receive().unwrap();
-        debug!("Got reply {:?}", res);
+        // let res: CalcReply = service.receive().unwrap();
+        // debug!("Got reply {:?}", res);
     }
     for _i in 0..1_000_000 / 2 {
         service.send(&mul_req).unwrap();
