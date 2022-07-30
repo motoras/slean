@@ -13,7 +13,7 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     let mut handles = Vec::new();
-    for _i in 0..2 {
+    for _i in 0..1 {
         handles.push(std::thread::spawn(|| run_server()));
     }
     for handle in handles {
