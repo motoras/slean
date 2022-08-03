@@ -12,7 +12,7 @@ pub struct Connection<'a, S: ReplService> {
     pub(crate) stream: TcpStream,
     service: &'a S,
     pending_read: u32,
-    buffer: Vec<u8>,
+    buffer: [u8; 512],
     buffer_pos: usize,
 }
 
@@ -22,7 +22,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
             stream,
             service,
             pending_read: 0,
-            buffer: Vec::with_capacity(0),
+            buffer: [0; 512],
             buffer_pos: 0,
         }
     }
@@ -38,7 +38,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
                         .execute(&mut &self.buffer[..], write_buff)
                         .unwrap();
                     write_buff.send(&mut self.stream).unwrap();
-                    self.buffer = Vec::with_capacity(0);
+                    //self.buffer = &mut [0; 0];
                     self.pending_read = 0;
                     self.buffer_pos = 0;
                 }
@@ -57,8 +57,8 @@ impl<'a, S: ReplService> Connection<'a, S> {
             }
             let left_to_read = self.pending_read;
             //info!("Message len is {}", left_to_read);
-            self.buffer = Vec::with_capacity(msg_len as usize);
-            self.buffer.resize(msg_len as usize, 0);
+            //self.buffer = &mut [0; 128];
+            //self.buffer.resize(msg_len as usize, 0);
             // if self.buffer.is_none() {
             //     //discard message
             //     //tell the client you are temporarely unavailable due to memory shortage, and ask him to try later
@@ -83,7 +83,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
             //info!("Sending reply....");
             write_buff.send(&mut self.stream).unwrap();
             //info!("Reply send ....");
-            self.buffer = Vec::with_capacity(0);
+            //self.buffer = &mut [0; 0];
             self.pending_read = 0;
             self.buffer_pos = 0;
         }
@@ -115,7 +115,10 @@ impl<'a, S: ReplService> Connection<'a, S> {
     #[inline]
     fn read_message_length(&mut self) -> std::io::Result<u32> {
         //maybe we should do a peek first?
-        let mut buf = [0u8; 4];
+        let mut buf = [0u8; 8]; //frame delim 4 bytes metadata 4 bytes frame info
+        if self.stream.peek(&mut buf).unwrap() != 8 {
+            //wait for more
+        }
         let bytes = match self.stream.read(&mut buf) {
             Ok(n) => n,
             Err(e) => {

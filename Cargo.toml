@@ -1,5 +1,5 @@
 [package]
-name = "sleam"
+name = "slean"
 version = "0.1.0"
 edition = "2021"
 
@@ -19,7 +19,7 @@ ctrlc="3.2.2"
 bytes="1.2.0"
 rmp-serde="1.1.0"
 serde="1.0.140"
-
+arrayvec="0.7.2"
 
 
 [dev-dependencies]

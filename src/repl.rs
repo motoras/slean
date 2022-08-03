@@ -36,6 +36,7 @@ impl<RS: ReplService> ReplServer<RS> {
         socket.set_reuse_address(true)?;
         socket.set_reuse_port(true)?;
         socket.set_nonblocking(true)?;
+        socket.set_nodelay(true)?;
         socket.bind(&addr.into())?;
         socket.listen(128)?;
         Ok(())
@@ -105,7 +106,7 @@ impl<RS: ReplService> ReplServer<RS> {
                         }
 
                         if event.is_readable() {
-                            //info!("Got message from {:?}", &token);
+                            info!("Got READ message from {:?}", &token);
                             match connections.get_mut(&token) {
                                 Some(conn) => {
                                     if let Err(err) = conn.on_read(&mut self.write_buff) {

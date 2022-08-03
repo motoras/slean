@@ -32,6 +32,7 @@ impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
             duration,
         )?;
         tcp_stream.set_nonblocking(false)?;
+        tcp_stream.set_nodelay(true)?;
         Ok(BlockingSleamService {
             write_buf,
             tcp_stream,

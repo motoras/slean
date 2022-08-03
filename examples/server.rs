@@ -2,7 +2,7 @@ mod calc;
 use calc::*;
 use dotenv::dotenv;
 use log::info;
-use sleam::{repl::ReplServer, service::SimpleReplyService};
+use slean::{repl::ReplServer, service::SimpleReplyService};
 fn calculator(req: CalcRequest) -> CalcReply {
     match req {
         CalcRequest::Add(x, y) => CalcReply::Sum(x + y),
