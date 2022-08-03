@@ -119,6 +119,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
         if self.stream.peek(&mut buf).unwrap() != 8 {
             //wait for more
         }
+        self.stream.bytes()
         let bytes = match self.stream.read(&mut buf) {
             Ok(n) => n,
             Err(e) => {

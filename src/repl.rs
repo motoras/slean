@@ -3,7 +3,7 @@ use log::info;
 use crate::memo::TcpWriteBuff;
 use crate::service::ReplService;
 
-use crate::connection::Connection;
+use crate::conn::Connection;
 use std::io::ErrorKind;
 
 use log::{error, trace};

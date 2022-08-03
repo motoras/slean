@@ -3,7 +3,7 @@ use log::info;
 use crate::memo::TcpWriteBuff;
 use crate::service::{MsgPackCodec, ReplService};
 
-use crate::connection::Connection;
+use crate::conn::Connection;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use log::{error, trace};
 use serde::de::DeserializeOwned;

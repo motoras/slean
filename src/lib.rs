@@ -1,4 +1,4 @@
-mod connection;
+mod conn;
 mod error;
 pub mod memo;
 pub mod repl;
