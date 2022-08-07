@@ -1,8 +1,15 @@
 use crate::error::SleanError;
 use std::fmt::{Debug, Display};
 
-//2^21 -1 about 2.1 MB
-const MAX_MSG_SIZE_BYTES: u32 = (1 << 21) - 1;
+pub enum MSG_TYPE {
+    REQ,
+    REPL,
+    ERR,
+}
+
+pub(crate) const FRAME_DESC_SIZE_BYTES: usize = 8;
+//2^21 - 8 about 2.1 MB
+pub(crate) const MAX_MSG_SIZE_BYTES: u32 = (1 << 21) - (FRAME_DESC_SIZE_BYTES as u32);
 const BITS_MSG_SIZE: u32 = 21;
 
 const MASK_22_24: u64 = 0b111 << 22;
@@ -11,11 +18,19 @@ const REPL: u64 = 0b1000;
 const ERR: u64 = 0b1111;
 
 #[repr(transparent)]
-pub struct FrameDescriptor {
+pub(crate) struct FrameDescriptor {
     desc: u64,
 }
 
 impl FrameDescriptor {
+    pub(crate) fn build_desc(msg_type: MSG_TYPE, len: u32) -> u64 {
+        match msg_type {
+            MSG_TYPE::REQ => ((REQ << 60) | (len as u64)),
+            MSG_TYPE::REPL => ((REPL << 60) | (len as u64)),
+            MSG_TYPE::ERR => ((ERR << 60) | (len as u64)),
+        }
+    }
+
     pub fn max_size() -> u32 {
         MAX_MSG_SIZE_BYTES
     }
@@ -31,22 +46,28 @@ impl FrameDescriptor {
     pub fn is_err(&self) -> bool {
         self.desc >> 60 == ERR
     }
-    #[inline]
+    #[inline(always)]
     pub fn len(&self) -> u32 {
-        (self.desc & 0x000000001FFFFF) as u32
+        FrameDescriptor::extract_len(self.desc)
+    }
+    #[inline(always)]
+    pub fn extract_len(desc: u64) -> u32 {
+        (desc & 0x000000001FFFFF) as u32
     }
 }
 
 impl TryFrom<u64> for FrameDescriptor {
     type Error = SleanError;
     fn try_from(value: u64) -> Result<Self, Self::Error> {
+        let len = FrameDescriptor::extract_len(value);
+        if len > MAX_MSG_SIZE_BYTES {
+            return Err(SleanError::InvalidFrameLen(len));
+        }
         if value & MASK_22_24 != 0 {
             //bit 22 to 24 must be zero
             return Err(SleanError::InvalidFrameHeader(value));
         }
-        let fd = FrameDescriptor { desc: value };
-
-        Ok(fd)
+        Ok(FrameDescriptor { desc: value })
     }
 }
 

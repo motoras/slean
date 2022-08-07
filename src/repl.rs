@@ -1,13 +1,13 @@
 use log::info;
 
-use crate::memo::TcpWriteBuff;
+use crate::memo::SleamBuf;
 use crate::service::ReplService;
 
 use crate::conn::Connection;
 use std::io::ErrorKind;
 
 use log::{error, trace};
-use mio::net::TcpListener;
+use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token};
 use std::collections::HashMap;
 
@@ -21,14 +21,14 @@ use std::net::SocketAddr;
 
 pub struct ReplServer<RS: ReplService> {
     service: RS,
-    write_buff: TcpWriteBuff,
+    write_buff: SleamBuf,
 }
 
-impl<RS: ReplService> ReplServer<RS> {
+impl<'repl, RS: ReplService> ReplServer<RS> {
     pub fn new(service: RS) -> Self {
         ReplServer {
             service,
-            write_buff: TcpWriteBuff::default(),
+            write_buff: SleamBuf::default(),
         }
     }
 
@@ -104,18 +104,47 @@ impl<RS: ReplService> ReplServer<RS> {
                             }
                             continue;
                         }
-
+                        if event.is_writable() {
+                            match connections.get_mut(&token) {
+                                Some(conn) => {
+                                    if let Err(err) = conn.on_write() {
+                                        error!("Error writing into connection {}", err);
+                                        connections.remove(&token);
+                                    } else {
+                                        let write_pend = conn.is_write_pending();
+                                        register_interest(
+                                            &mut conn.stream,
+                                            &poll,
+                                            token,
+                                            write_pend,
+                                        );
+                                    }
+                                }
+                                None => {
+                                    info!("No connection for {:?}", &token);
+                                    continue;
+                                }
+                            }
+                        }
                         if event.is_readable() {
                             info!("Got READ message from {:?}", &token);
                             match connections.get_mut(&token) {
                                 Some(conn) => {
-                                    if let Err(err) = conn.on_read(&mut self.write_buff) {
-                                        error!("Error reading from connection {}", err);
-                                        connections.remove(&token);
+                                    if !conn.is_write_pending() {
+                                        if let Err(err) = conn.on_read(&mut self.write_buff) {
+                                            error!("Error reading from connection {}", err);
+                                            connections.remove(&token);
+                                        } else {
+                                            let write_pend = conn.is_write_pending();
+                                            register_interest(
+                                                &mut conn.stream,
+                                                &poll,
+                                                token,
+                                                write_pend,
+                                            );
+                                        }
                                     } else {
-                                        poll.registry()
-                                            .reregister(&mut conn.stream, token, Interest::READABLE)
-                                            .unwrap();
+                                        info!("Won't read from {:?} until we can write previous replies", &token);
                                     }
                                 }
                                 None => {
@@ -129,4 +158,13 @@ impl<RS: ReplService> ReplServer<RS> {
             }
         }
     }
+}
+
+#[inline(always)]
+fn register_interest(stream: &mut TcpStream, poll: &Poll, token: Token, write_pending: bool) {
+    let interest = Interest::READABLE;
+    if write_pending {
+        interest.add(Interest::WRITABLE);
+    }
+    poll.registry().reregister(stream, token, interest).unwrap();
 }

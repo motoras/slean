@@ -1,6 +1,7 @@
 use log::info;
 
-use crate::memo::TcpWriteBuff;
+use crate::memo::SleamBuf;
+use crate::protocol::MSG_TYPE;
 use crate::service::{MsgPackCodec, ReplService};
 
 use crate::conn::Connection;
@@ -19,14 +20,14 @@ where
 {
     req: PhantomData<Req>,
     repl: PhantomData<Repl>,
-    write_buf: TcpWriteBuff,
+    write_buf: SleamBuf,
     tcp_stream: TcpStream,
 }
 
 impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
     pub fn connect() -> Result<BlockingSleamService<Req, Repl>, std::io::Error> {
         let duration = Duration::from_secs(10);
-        let write_buf = TcpWriteBuff::default();
+        let write_buf = SleamBuf::default();
         let tcp_stream = TcpStream::connect_timeout(
             &std::net::SocketAddr::from(([127, 0, 0, 1], 2302)),
             duration,
@@ -41,9 +42,11 @@ impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
         })
     }
 
-    pub fn send(&mut self, req: &Req) -> Result<(), std::io::Error> {
+    pub fn send(&mut self, req: &Req) -> Result<u32, std::io::Error> {
+        self.write_buf.clear();
         MsgPackCodec::write(req, &mut self.write_buf).unwrap();
-        self.write_buf.send(&mut self.tcp_stream)
+        self.write_buf.commit(MSG_TYPE::REQ);
+        self.write_buf.copy_to(&mut self.tcp_stream)
     }
 
     pub fn receive(&mut self) -> Result<Repl, std::io::Error> {

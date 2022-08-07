@@ -1,19 +1,17 @@
-use byteorder::{ByteOrder, LittleEndian, NetworkEndian};
-use log::*;
+use byteorder::{ByteOrder, LittleEndian};
 use mio::net::TcpStream;
-use mio::Token;
 
 use std::io::{Error, ErrorKind, Read};
 
-use crate::memo::TcpWriteBuff;
-use crate::service::ReplService;
+use crate::memo::SleamBuf;
+use crate::protocol::{FrameDescriptor, FRAME_DESC_SIZE_BYTES};
+use crate::service::{IoBuf, ReplService};
 
 pub struct Connection<'a, S: ReplService> {
     pub(crate) stream: TcpStream,
     service: &'a S,
     pending_read: u32,
-    buffer: [u8; 512],
-    buffer_pos: usize,
+    pending_buff: Option<SleamBuf>,
 }
 
 impl<'a, S: ReplService> Connection<'a, S> {
@@ -22,120 +20,134 @@ impl<'a, S: ReplService> Connection<'a, S> {
             stream,
             service,
             pending_read: 0,
-            buffer: [0; 512],
-            buffer_pos: 0,
+            pending_buff: None,
         }
     }
-    pub fn on_read(&mut self, write_buff: &mut TcpWriteBuff) -> Result<u32, Error> {
-        //info!("Reading message");
-        let mut bytes_read = 0;
-        if self.pending_read > 0 {
-            let left_to_read = self.pending_read;
-            match self.read_msg() {
-                Ok(_) => {
-                    bytes_read += left_to_read;
-                    self.service
-                        .execute(&mut &self.buffer[..], write_buff)
-                        .unwrap();
-                    write_buff.send(&mut self.stream).unwrap();
-                    //self.buffer = &mut [0; 0];
-                    self.pending_read = 0;
-                    self.buffer_pos = 0;
-                }
-                Err(err) => match err.kind() {
-                    ErrorKind::WouldBlock => return Ok(left_to_read - self.pending_read),
-                    _ => return Err(err),
+
+    #[inline]
+    pub fn is_write_pending(&self) -> bool {
+        self.pending_read == 0 && self.pending_buff.is_some()
+    }
+
+    #[inline]
+    pub fn on_write(&mut self) -> Result<u32, Error> {
+        if self.pending_read == 0 {
+            match &mut self.pending_buff {
+                Some(crt_write_buff) => match crt_write_buff.copy_to(&mut self.stream) {
+                    Ok(n) => {
+                        if crt_write_buff.is_empty() {
+                            self.pending_buff = None;
+                        }
+                        return Ok(n);
+                    }
+                    Err(e) => return Err(e),
                 },
+                None => return Ok(0),
             }
         }
-        // self.read_message_length()?;
-        // Ok(4)
+        Ok(0)
+    }
+
+    #[inline]
+    pub fn is_read_pending(&self) -> bool {
+        self.pending_read > 0
+    }
+    pub fn on_read(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
+        assert!(!self.is_write_pending());
+        if self.pending_read > 0 {
+            //we must read in the connection's buffer
+            assert!(self.pending_buff.is_some());
+            match &mut self.pending_buff {
+                Some(crt_read_buff) => {
+                    match crt_read_buff.copy_from(&mut self.stream, self.pending_read) {
+                        Ok(n) => {
+                            self.pending_read -= n;
+                            if self.pending_read == 0 {
+                                assert!(crt_read_buff.write_available() == 0);
+                                self.service
+                                    .execute(&mut IoBuf::Separate(crt_read_buff, rw_buff));
+                                self.pending_buff = None;
+                            } else {
+                                //we still need to read more
+                                return Ok(n);
+                            }
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+                None => return Ok(0),
+            }
+        }
+
         loop {
             let msg_len = self.read_message_length()?;
             if msg_len == 0 {
                 return Ok(0);
             }
-            let left_to_read = self.pending_read;
-            //info!("Message len is {}", left_to_read);
-            //self.buffer = &mut [0; 128];
-            //self.buffer.resize(msg_len as usize, 0);
-            // if self.buffer.is_none() {
-            //     //discard message
-            //     //tell the client you are temporarely unavailable due to memory shortage, and ask him to try later
-            //     return Ok(0);
-            // }
             while self.pending_read > 0 {
-                match self.read_msg() {
-                    Ok(_) => {
-                        bytes_read += left_to_read;
+                match rw_buff.copy_from(&mut self.stream, self.pending_read) {
+                    Ok(n) => {
+                        self.pending_read -= n;
+                        if self.pending_read == 0 {
+                            self.service.execute(&mut IoBuf::Same(rw_buff));
+                            rw_buff.copy_to(&mut self.stream);
+                            let _ = self.send(rw_buff)?;
+                            if self.pending_buff.is_some() {
+                                return Ok(n); //write was incomplete so will need to try again
+                            }
+                        } else {
+                            //read was incomplete we still need to read more
+                            let mut conn_buf = SleamBuf::alloc(msg_len);
+                            conn_buf.copy_from(rw_buff, rw_buff.len() as u32);
+                            rw_buff.clear();
+                            self.pending_buff = Some(conn_buf);
+                            return Ok(n);
+                        }
                     }
-                    Err(err) => match err.kind() {
-                        ErrorKind::WouldBlock => return Ok(left_to_read - self.pending_read),
-                        _ => return Err(err),
-                    },
+                    Err(e) => return Err(e),
                 }
             }
-            //we got message
-            //info!("Message Read");
-            self.service
-                .execute(&mut &self.buffer[..], write_buff)
-                .unwrap();
-            //info!("Sending reply....");
-            write_buff.send(&mut self.stream).unwrap();
-            //info!("Reply send ....");
-            //self.buffer = &mut [0; 0];
-            self.pending_read = 0;
-            self.buffer_pos = 0;
         }
     }
 
-    fn read_msg(&mut self) -> Result<(), Error> {
-        assert!(!self.buffer.is_empty());
-        while self.pending_read > 0 {
-            match self.stream.read(
-                &mut self.buffer
-                    [self.buffer_pos as usize..self.buffer_pos + self.pending_read as usize],
-            ) {
-                Ok(n) => {
-                    assert!(self.pending_read >= n as u32);
-                    self.pending_read -= n as u32;
-                    self.buffer_pos += n;
+    fn send(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
+        match rw_buff.copy_to(&mut self.stream) {
+            Ok(n) => {
+                let left = rw_buff.len() as u32;
+                if left > 0 {
+                    let mut conn_buf = SleamBuf::alloc(left);
+                    conn_buf.copy_from(rw_buff, rw_buff.len() as u32);
+                    self.pending_buff = Some(conn_buf);
                 }
-
-                Err(err) => match err.kind() {
-                    ErrorKind::Interrupted => {
-                        continue;
-                    }
-                    _ => return Err(err), //Would Block is handle at a higher level
-                },
+                rw_buff.clear();
+                return Ok(n);
             }
+            Err(e) => return Err(e),
         }
-        Ok(())
     }
+
     #[inline]
     fn read_message_length(&mut self) -> std::io::Result<u32> {
-        //maybe we should do a peek first?
-        let mut buf = [0u8; 8]; //frame delim 4 bytes metadata 4 bytes frame info
-        if self.stream.peek(&mut buf).unwrap() != 8 {
-            //wait for more
+        self.pending_read = 0;
+        //frame delim 4 bytes metadata 4 bytes frame info
+        let mut buf = [0u8; FRAME_DESC_SIZE_BYTES];
+        //we want to read the entire descriptor
+        let bytes_read = self.stream.peek(&mut buf)?;
+        if bytes_read < FRAME_DESC_SIZE_BYTES {
+            return Ok(0); //will read later
         }
-        let bytes = match self.stream.read(&mut buf) {
-            Ok(n) => n,
-            Err(e) => {
-                if e.kind() == ErrorKind::WouldBlock {
-                    return Ok(0);
-                } else {
-                    return Err(e);
-                }
-            }
-        };
-        //I guess we can use peek to avoid this
-        if bytes < 4 && bytes > 0 {
-            warn!("Found message length of {} bytes", bytes);
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid message length"));
+        //skip the peeked bytes; this shall not crash
+        std::io::copy(
+            &mut self.stream.by_ref().take(FRAME_DESC_SIZE_BYTES as u64),
+            &mut std::io::sink(),
+        )?;
+        let descr = LittleEndian::read_u64(buf.as_ref());
+        let frame_desc: FrameDescriptor =
+            descr.try_into().map_err(|_err| ErrorKind::InvalidData)?;
+        if !frame_desc.is_req() {
+            return Err(ErrorKind::InvalidData.into());
         }
-
-        self.pending_read = LittleEndian::read_u32(buf.as_ref());
+        self.pending_read = frame_desc.len();
         Ok(self.pending_read)
     }
 }
