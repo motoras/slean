@@ -1,27 +1,3 @@
-//will revisite this later
-use log::info;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-
-use crate::service::{MsgPackCodec, ReplService};
-
-use crate::conn::Connection;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use log::{error, trace};
-use mio::net::{TcpListener, TcpStream};
-use mio::{Events, Interest, Poll, Token};
-use std::io::ErrorKind;
-use std::marker::PhantomData;
-use std::time::Duration;
-
-use std::io::Error as IoError;
-
-// Some tokens to allow us to identify which event is for which socket.
-const REQ: Token = Token(1 << 29);
-
-use socket2::{Domain, Protocol, Socket, Type};
-use std::net::SocketAddr;
-
 // impl<Req: Serialize, Repl: DeserializeOwned> ReqServer<Req, Repl> {
 //     pub fn new() -> Self {
 //         ReqServer {

@@ -1,7 +1,7 @@
 use std::io::{ErrorKind, Read, Write};
 use std::mem::MaybeUninit;
 
-use crate::protocol::{FrameDescriptor, FRAME_DESC_SIZE_BYTES, MAX_MSG_SIZE_BYTES, MSG_TYPE};
+use crate::protocol::{FrameDescriptor, MsgType, FRAME_DESC_SIZE_BYTES, MAX_MSG_SIZE_BYTES};
 
 const STACK_BUF_SIZE: u32 = 1 << 13;
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl SleamBuf {
         }
     }
 
-    pub fn commit(&mut self, msg_type: MSG_TYPE) {
+    pub fn commit(&mut self, msg_type: MsgType) {
         assert!(self.read_pos == FRAME_DESC_SIZE_BYTES);
         let msg_len = self.len() as u32;
         let frame_desc = FrameDescriptor::build_desc(msg_type, msg_len);
@@ -96,18 +96,18 @@ impl SleamBuf {
     }
 
     #[inline(always)]
-    pub(crate) fn write_slice(&mut self) -> &mut [u8] {
+    pub fn write_slice(&mut self) -> &mut [u8] {
         &mut self.data.as_mut()[self.write_pos..]
     }
 
     #[inline(always)]
-    pub(crate) fn read_slice(&mut self) -> &mut [u8] {
+    pub fn read_slice(&mut self) -> &mut [u8] {
         &mut self.data.as_mut()[self.read_pos..self.write_pos]
     }
 
     /// Returns true if there are unread bytes in the buffer.
     #[inline(always)]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.write_pos == self.read_pos
     }
 
@@ -163,7 +163,7 @@ impl Write for SleamBuf {
 impl Read for SleamBuf {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let to_read = std::cmp::min(self.len(), buf.len());
-        buf[0..to_read].copy_from_slice(&mut self.data[self.read_pos..self.read_pos + to_read]);
+        buf[0..to_read].copy_from_slice(&self.data[self.read_pos..self.read_pos + to_read]);
         self.read_pos += to_read;
         Ok(to_read)
     }

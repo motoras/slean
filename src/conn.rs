@@ -119,9 +119,9 @@ impl<'a, S: ReplService> Connection<'a, S> {
                     self.pending_buff = Some(conn_buf);
                 }
                 rw_buff.reset(FRAME_DESC_SIZE_BYTES);
-                return Ok(left);
+                Ok(left)
             }
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         }
     }
 

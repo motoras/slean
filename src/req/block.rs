@@ -1,13 +1,9 @@
-use log::info;
-
 use crate::error::RemoteError;
 use crate::memo::SleamBuf;
-use crate::protocol::{FrameDescriptor, FRAME_DESC_SIZE_BYTES, MSG_TYPE};
-use crate::service::{MsgPackCodec, ReplService};
+use crate::protocol::{FrameDescriptor, MsgType, FRAME_DESC_SIZE_BYTES};
+use crate::service::MsgPackCodec;
 
-use crate::conn::Connection;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use log::{error, trace};
+use byteorder::{LittleEndian, ReadBytesExt};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::io::ErrorKind;
@@ -47,7 +43,7 @@ impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
     pub fn send(&mut self, req: &Req) -> Result<u32, std::io::Error> {
         self.buff.reset(FRAME_DESC_SIZE_BYTES);
         MsgPackCodec::write(req, &mut self.buff).unwrap();
-        self.buff.commit(MSG_TYPE::REQ);
+        self.buff.commit(MsgType::Req);
         self.buff.copy_to(&mut self.tcp_stream)
     }
 
@@ -59,10 +55,12 @@ impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
         if fd.is_repl() {
             let repl: Repl = MsgPackCodec::read(&mut self.buff).unwrap();
             Ok(repl)
-        } else {
+        } else if fd.is_err() {
             let err: RemoteError = MsgPackCodec::read(&mut self.buff).unwrap();
             dbg!(err);
             Err(ErrorKind::Other.into())
+        } else {
+            Err(ErrorKind::InvalidData.into())
         }
     }
 }

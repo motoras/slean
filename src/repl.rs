@@ -24,7 +24,7 @@ pub struct ReplServer<RS: ReplService> {
     buffer: SleamBuf,
 }
 
-impl<'repl, RS: ReplService> ReplServer<RS> {
+impl<RS: ReplService> ReplServer<RS> {
     pub fn new(service: RS) -> Self {
         ReplServer {
             service,

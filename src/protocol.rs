@@ -1,16 +1,15 @@
 use crate::error::SleanError;
 use std::fmt::{Debug, Display};
 
-pub enum MSG_TYPE {
-    REQ,
-    REPL,
-    ERR,
+pub enum MsgType {
+    Req,
+    Repl,
+    Err,
 }
 
 pub(crate) const FRAME_DESC_SIZE_BYTES: usize = 8;
-//2^21 - 8 about 2.1 MB
-pub(crate) const MAX_MSG_SIZE_BYTES: u32 = (1 << 21) - (FRAME_DESC_SIZE_BYTES as u32);
-const BITS_MSG_SIZE: u32 = 21;
+//2^21 - 9 about 2.1 MB
+pub(crate) const MAX_MSG_SIZE_BYTES: u32 = (1 << 21) - (FRAME_DESC_SIZE_BYTES as u32) - 1;
 
 const MASK_22_24: u64 = 0b111 << 22;
 const REQ: u64 = 0b0001;
@@ -23,17 +22,14 @@ pub(crate) struct FrameDescriptor {
 }
 
 impl FrameDescriptor {
-    pub(crate) fn build_desc(msg_type: MSG_TYPE, len: u32) -> u64 {
+    pub(crate) fn build_desc(msg_type: MsgType, len: u32) -> u64 {
         match msg_type {
-            MSG_TYPE::REQ => ((REQ << 60) | (len as u64)),
-            MSG_TYPE::REPL => ((REPL << 60) | (len as u64)),
-            MSG_TYPE::ERR => ((ERR << 60) | (len as u64)),
+            MsgType::Req => ((REQ << 60) | (len as u64)),
+            MsgType::Repl => ((REPL << 60) | (len as u64)),
+            MsgType::Err => ((ERR << 60) | (len as u64)),
         }
     }
 
-    pub fn max_size() -> u32 {
-        MAX_MSG_SIZE_BYTES
-    }
     #[inline]
     pub fn is_req(&self) -> bool {
         self.desc >> 60 == REQ
@@ -68,12 +64,6 @@ impl TryFrom<u64> for FrameDescriptor {
             return Err(SleanError::InvalidFrameHeader(value));
         }
         Ok(FrameDescriptor { desc: value })
-    }
-}
-
-impl Into<u64> for FrameDescriptor {
-    fn into(self) -> u64 {
-        self.desc
     }
 }
 

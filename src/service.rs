@@ -1,6 +1,5 @@
 use std::io::{Error, Read, Write};
 
-use log::info;
 use rmp_serde::encode::write;
 use rmp_serde::from_read;
 use serde::de::DeserializeOwned;
@@ -75,21 +74,21 @@ where
                 match (self.worker)(req) {
                     Ok(repl) => match MsgPackCodec::write(repl, write_buff) {
                         Ok(_) => {
-                            write_buff.commit(crate::protocol::MSG_TYPE::REPL);
+                            write_buff.commit(crate::protocol::MsgType::Repl);
                         }
                         Err(err) => {
                             write_buff.reset(FRAME_DESC_SIZE_BYTES);
                             let r_err = RemoteError::new(0, err.to_string());
                             //it must be infallable
                             MsgPackCodec::write(r_err, write_buff).unwrap();
-                            write_buff.commit(crate::protocol::MSG_TYPE::ERR);
+                            write_buff.commit(crate::protocol::MsgType::Err);
                         }
                     },
                     Err(err) => {
                         let r_err = RemoteError::new(0, err.to_string());
                         //it must be infallable
                         MsgPackCodec::write(r_err, write_buff).unwrap();
-                        write_buff.commit(crate::protocol::MSG_TYPE::ERR);
+                        write_buff.commit(crate::protocol::MsgType::Err);
                     }
                 }
             }
@@ -100,7 +99,7 @@ where
                 let r_err = RemoteError::new(0, err.to_string());
                 //it must be infallable
                 MsgPackCodec::write(r_err, write_buff).unwrap();
-                write_buff.commit(crate::protocol::MSG_TYPE::ERR);
+                write_buff.commit(crate::protocol::MsgType::Err);
             }
         }
     }
