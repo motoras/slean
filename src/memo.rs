@@ -63,7 +63,6 @@ impl SleamBuf {
             }
         }
         assert!(self.is_empty());
-        self.clear();
         Ok(len as u32)
     }
 
@@ -115,8 +114,7 @@ impl SleamBuf {
     #[inline(always)]
     /// Discards all data in the buffer.
     pub fn clear(&mut self) {
-        self.read_pos = 0;
-        self.write_pos = 0;
+        self.reset(0);
     }
 
     #[inline(always)]
@@ -130,6 +128,12 @@ impl SleamBuf {
     #[inline(always)]
     pub fn advance(&mut self, advance_by: usize) {
         self.write_pos += advance_by;
+    }
+
+    #[inline(always)]
+    pub fn reset(&mut self, reserve: usize) {
+        self.read_pos = reserve;
+        self.write_pos = reserve;
     }
 }
 
@@ -152,7 +156,6 @@ impl Write for SleamBuf {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.clear();
         Ok(())
     }
 }

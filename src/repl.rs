@@ -21,14 +21,14 @@ use std::net::SocketAddr;
 
 pub struct ReplServer<RS: ReplService> {
     service: RS,
-    write_buff: SleamBuf,
+    buffer: SleamBuf,
 }
 
 impl<'repl, RS: ReplService> ReplServer<RS> {
     pub fn new(service: RS) -> Self {
         ReplServer {
             service,
-            write_buff: SleamBuf::default(),
+            buffer: SleamBuf::default(),
         }
     }
 
@@ -107,7 +107,7 @@ impl<'repl, RS: ReplService> ReplServer<RS> {
                         if event.is_writable() {
                             match connections.get_mut(&token) {
                                 Some(conn) => {
-                                    if let Err(err) = conn.on_write() {
+                                    if let Err(err) = conn.on_write(&mut self.buffer) {
                                         error!("Error writing into connection {}", err);
                                         connections.remove(&token);
                                     } else {
@@ -131,7 +131,7 @@ impl<'repl, RS: ReplService> ReplServer<RS> {
                             match connections.get_mut(&token) {
                                 Some(conn) => {
                                     if !conn.is_write_pending() {
-                                        if let Err(err) = conn.on_read(&mut self.write_buff) {
+                                        if let Err(err) = conn.on_read(&mut self.buffer) {
                                             error!("Error reading from connection {}", err);
                                             connections.remove(&token);
                                         } else {

@@ -30,13 +30,14 @@ impl<'a, S: ReplService> Connection<'a, S> {
     }
 
     #[inline]
-    pub fn on_write(&mut self) -> Result<u32, Error> {
+    pub fn on_write(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
         if self.pending_read == 0 {
             match &mut self.pending_buff {
                 Some(crt_write_buff) => match crt_write_buff.copy_to(&mut self.stream) {
                     Ok(n) => {
                         if crt_write_buff.is_empty() {
                             self.pending_buff = None;
+                            self.on_read(rw_buff)?;
                         }
                         return Ok(n);
                     }
@@ -49,9 +50,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
     }
 
     #[inline]
-    pub fn is_read_pending(&self) -> bool {
-        self.pending_read > 0
-    }
+
     pub fn on_read(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
         assert!(!self.is_write_pending());
         if self.pending_read > 0 {
@@ -67,6 +66,9 @@ impl<'a, S: ReplService> Connection<'a, S> {
                                 self.service
                                     .execute(&mut IoBuf::Separate(crt_read_buff, rw_buff));
                                 self.pending_buff = None;
+                                if self.send(rw_buff)? != 0 {
+                                    return Ok(n); //write was incomplete so will need to try again
+                                }
                             } else {
                                 //we still need to read more
                                 return Ok(n);
@@ -90,16 +92,13 @@ impl<'a, S: ReplService> Connection<'a, S> {
                         self.pending_read -= n;
                         if self.pending_read == 0 {
                             self.service.execute(&mut IoBuf::Same(rw_buff));
-                            rw_buff.copy_to(&mut self.stream);
-                            let _ = self.send(rw_buff)?;
-                            if self.pending_buff.is_some() {
+                            if self.send(rw_buff)? != 0 {
                                 return Ok(n); //write was incomplete so will need to try again
                             }
                         } else {
                             //read was incomplete we still need to read more
                             let mut conn_buf = SleamBuf::alloc(msg_len);
-                            conn_buf.copy_from(rw_buff, rw_buff.len() as u32);
-                            rw_buff.clear();
+                            conn_buf.copy_from(rw_buff, rw_buff.len() as u32)?;
                             self.pending_buff = Some(conn_buf);
                             return Ok(n);
                         }
@@ -112,15 +111,15 @@ impl<'a, S: ReplService> Connection<'a, S> {
 
     fn send(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
         match rw_buff.copy_to(&mut self.stream) {
-            Ok(n) => {
+            Ok(_) => {
                 let left = rw_buff.len() as u32;
                 if left > 0 {
                     let mut conn_buf = SleamBuf::alloc(left);
-                    conn_buf.copy_from(rw_buff, rw_buff.len() as u32);
+                    conn_buf.copy_from(rw_buff, rw_buff.len() as u32)?;
                     self.pending_buff = Some(conn_buf);
                 }
-                rw_buff.clear();
-                return Ok(n);
+                rw_buff.reset(FRAME_DESC_SIZE_BYTES);
+                return Ok(left);
             }
             Err(e) => return Err(e),
         }
@@ -131,23 +130,49 @@ impl<'a, S: ReplService> Connection<'a, S> {
         self.pending_read = 0;
         //frame delim 4 bytes metadata 4 bytes frame info
         let mut buf = [0u8; FRAME_DESC_SIZE_BYTES];
-        //we want to read the entire descriptor
-        let bytes_read = self.stream.peek(&mut buf)?;
-        if bytes_read < FRAME_DESC_SIZE_BYTES {
-            return Ok(0); //will read later
+        loop {
+            match self.stream.peek(&mut buf) {
+                Ok(bytes_read) => {
+                    if bytes_read < FRAME_DESC_SIZE_BYTES {
+                        return Ok(0); //will read later
+                    }
+                    self.drain_header()?;
+                    let descr = LittleEndian::read_u64(buf.as_ref());
+                    let frame_desc: FrameDescriptor =
+                        descr.try_into().map_err(|_err| ErrorKind::InvalidData)?;
+                    if !frame_desc.is_req() {
+                        return Err(ErrorKind::InvalidData.into());
+                    }
+                    self.pending_read = frame_desc.len();
+                    return Ok(self.pending_read);
+                }
+                Err(err) => match err.kind() {
+                    ErrorKind::WouldBlock => return Ok(0),
+                    ErrorKind::Interrupted => continue,
+                    _ => return Err(err),
+                },
+            }
         }
-        //skip the peeked bytes; this shall not crash
-        std::io::copy(
-            &mut self.stream.by_ref().take(FRAME_DESC_SIZE_BYTES as u64),
-            &mut std::io::sink(),
-        )?;
-        let descr = LittleEndian::read_u64(buf.as_ref());
-        let frame_desc: FrameDescriptor =
-            descr.try_into().map_err(|_err| ErrorKind::InvalidData)?;
-        if !frame_desc.is_req() {
-            return Err(ErrorKind::InvalidData.into());
+    }
+
+    fn drain_header(&mut self) -> Result<(), Error> {
+        let header_size = FRAME_DESC_SIZE_BYTES as u64;
+        let mut take = self.stream.by_ref().take(header_size);
+        loop {
+            match std::io::copy(&mut take, &mut std::io::sink()) {
+                Ok(n) => {
+                    if n == header_size {
+                        return Ok(());
+                    }
+                    //this will be very strange
+                    //I have no idee if it may be possible to happen as peek has returned FRAME_DESC_SIZE_BYTES
+                    return Err(ErrorKind::InvalidData.into());
+                }
+                Err(err) => match err.kind() {
+                    ErrorKind::Interrupted => continue,
+                    _ => return Err(err), //any other error including WouldBlock will be fatal but again I wonder if they could ever happen
+                },
+            }
         }
-        self.pending_read = frame_desc.len();
-        Ok(self.pending_read)
     }
 }
