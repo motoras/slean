@@ -3,10 +3,9 @@ use log::info;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::memo::TcpWriteBuff;
 use crate::service::{MsgPackCodec, ReplService};
 
-use crate::connection::Connection;
+use crate::conn::Connection;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use log::{error, trace};
 use mio::net::{TcpListener, TcpStream};
@@ -22,16 +21,6 @@ const REQ: Token = Token(1 << 29);
 
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
-
-pub struct ReqServer<Req, Repl>
-where
-    Req: Serialize,
-    Repl: DeserializeOwned,
-{
-    write_buf: TcpWriteBuff,
-    req: PhantomData<Req>,
-    repl: PhantomData<Repl>,
-}
 
 // impl<Req: Serialize, Repl: DeserializeOwned> ReqServer<Req, Repl> {
 //     pub fn new() -> Self {

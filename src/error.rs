@@ -1,16 +1,20 @@
+use serde_derive::{Deserialize, Serialize};
 use std::io::Error as IoError;
 use thiserror::Error;
 
-pub(crate) type SleamServerResult<T> = Result<T, SleamServerError>;
+pub(crate) type SleanResult<T> = Result<T, SleanError>;
 
 #[derive(Error, Debug)]
-pub enum SleamServerError {
+pub enum SleanError {
     // #[error("data store disconnected")]
     // Disconnect(#[from] IoError),
     #[error("the data for key `{0}` is not available")]
     Redaction(String),
-    #[error("invalid header (expected {expected:?}, found {found:?})")]
-    InvalidHeader { expected: String, found: String },
+    #[error("Invalid header {0:X},")]
+    InvalidFrameHeader(u64),
+
+    #[error("Invalid frame len {0},")]
+    InvalidFrameLen(u32),
     #[error("unknown data store error")]
     Unknown,
 
@@ -21,8 +25,20 @@ pub enum SleamServerError {
     IoError(#[from] IoError),
 }
 
-// #[derive(Error, Debug)]
-// pub struct SleamError<'err> {
-//     err_code: u32,
-//     err_msg: &'err str,
-// }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RemoteError {
+    err_code: u32,
+    err_msg: String,
+}
+
+impl RemoteError {
+    pub fn new(err_code: u32, err_msg: String) -> Self {
+        RemoteError { err_code, err_msg }
+    }
+    pub fn code(&self) -> u32 {
+        self.err_code
+    }
+    pub fn msg(&self) -> &str {
+        &self.err_msg
+    }
+}

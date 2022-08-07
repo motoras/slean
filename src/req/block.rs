@@ -1,13 +1,16 @@
 use log::info;
 
-use crate::memo::TcpWriteBuff;
+use crate::error::RemoteError;
+use crate::memo::SleamBuf;
+use crate::protocol::{FrameDescriptor, FRAME_DESC_SIZE_BYTES, MSG_TYPE};
 use crate::service::{MsgPackCodec, ReplService};
 
-use crate::connection::Connection;
+use crate::conn::Connection;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use log::{error, trace};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::io::ErrorKind;
 use std::marker::PhantomData;
 use std::net::TcpStream;
 use std::time::Duration;
@@ -19,14 +22,14 @@ where
 {
     req: PhantomData<Req>,
     repl: PhantomData<Repl>,
-    write_buf: TcpWriteBuff,
+    buff: SleamBuf,
     tcp_stream: TcpStream,
 }
 
 impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
     pub fn connect() -> Result<BlockingSleamService<Req, Repl>, std::io::Error> {
         let duration = Duration::from_secs(10);
-        let write_buf = TcpWriteBuff::default();
+        let buff = SleamBuf::default();
         let tcp_stream = TcpStream::connect_timeout(
             &std::net::SocketAddr::from(([127, 0, 0, 1], 2302)),
             duration,
@@ -34,21 +37,32 @@ impl<Req: Serialize, Repl: DeserializeOwned> BlockingSleamService<Req, Repl> {
         tcp_stream.set_nonblocking(false)?;
         tcp_stream.set_nodelay(true)?;
         Ok(BlockingSleamService {
-            write_buf,
+            buff,
             tcp_stream,
             req: PhantomData,
             repl: PhantomData,
         })
     }
 
-    pub fn send(&mut self, req: &Req) -> Result<(), std::io::Error> {
-        MsgPackCodec::write(req, &mut self.write_buf).unwrap();
-        self.write_buf.send(&mut self.tcp_stream)
+    pub fn send(&mut self, req: &Req) -> Result<u32, std::io::Error> {
+        self.buff.reset(FRAME_DESC_SIZE_BYTES);
+        MsgPackCodec::write(req, &mut self.buff).unwrap();
+        self.buff.commit(MSG_TYPE::REQ);
+        self.buff.copy_to(&mut self.tcp_stream)
     }
 
     pub fn receive(&mut self) -> Result<Repl, std::io::Error> {
-        let _len = self.tcp_stream.read_u32::<LittleEndian>().unwrap();
-        let repl: Repl = MsgPackCodec::read(&mut self.tcp_stream).unwrap();
-        Ok(repl)
+        let desc = self.tcp_stream.read_u64::<LittleEndian>().unwrap();
+        let fd: FrameDescriptor = desc.try_into().unwrap();
+        self.buff.reset(0);
+        self.buff.copy_from(&mut self.tcp_stream, fd.len()).unwrap();
+        if fd.is_repl() {
+            let repl: Repl = MsgPackCodec::read(&mut self.buff).unwrap();
+            Ok(repl)
+        } else {
+            let err: RemoteError = MsgPackCodec::read(&mut self.buff).unwrap();
+            dbg!(err);
+            Err(ErrorKind::Other.into())
+        }
     }
 }
