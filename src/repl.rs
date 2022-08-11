@@ -117,7 +117,7 @@ impl<RS: ReplService> ReplServer<RS> {
                                             &poll,
                                             token,
                                             write_pend,
-                                        );
+                                        )?;
                                     }
                                 }
                                 None => {
@@ -141,7 +141,7 @@ impl<RS: ReplService> ReplServer<RS> {
                                                 &poll,
                                                 token,
                                                 write_pend,
-                                            );
+                                            )?;
                                         }
                                     } else {
                                         info!("Won't read from {:?} until we can write previous replies", &token);
@@ -161,10 +161,15 @@ impl<RS: ReplService> ReplServer<RS> {
 }
 
 #[inline(always)]
-fn register_interest(stream: &mut TcpStream, poll: &Poll, token: Token, write_pending: bool) {
+fn register_interest(
+    stream: &mut TcpStream,
+    poll: &Poll,
+    token: Token,
+    write_pending: bool,
+) -> Result<(), IoError> {
     let interest = Interest::READABLE;
     if write_pending {
         interest.add(Interest::WRITABLE);
     }
-    poll.registry().reregister(stream, token, interest).unwrap();
+    poll.registry().reregister(stream, token, interest)
 }

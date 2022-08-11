@@ -2,8 +2,9 @@ mod calc;
 use calc::*;
 use dotenv::dotenv;
 use log::info;
+use slean::error::SleanResult;
 use slean::{repl::ReplServer, service::SimpleReplyService};
-fn calculator(req: CalcRequest) -> Result<CalcReply, std::io::Error> {
+fn calculator(req: CalcRequest) -> SleanResult<CalcReply> {
     info!("Request is {:?}", &req);
     match req {
         CalcRequest::Add(x, y) => Ok(CalcReply::Sum(x + y)),
