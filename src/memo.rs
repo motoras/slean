@@ -24,6 +24,7 @@ impl SleamBuf {
         Self::alloc_for(len, 0)
     }
 
+    //we may want to do this whithout transmute....
     fn create_buffer(len: u32) -> Box<[u8]> {
         if len > STACK_BUF_SIZE {
             let mut heap_data: Vec<MaybeUninit<u8>> = Vec::with_capacity(len as usize);

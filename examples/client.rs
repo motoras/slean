@@ -1,5 +1,4 @@
 mod calc;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use calc::*;
 use dotenv::dotenv;
 use log::debug;

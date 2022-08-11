@@ -1,5 +1,5 @@
 mod conn;
-mod error;
+pub mod error;
 pub mod memo;
 mod protocol;
 pub mod repl;

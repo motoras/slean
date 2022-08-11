@@ -1,7 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 use mio::net::TcpStream;
 
-use std::io::{Error, ErrorKind, Read};
+use std::io::{ErrorKind, Read, Result as IoResult};
 
 use crate::memo::SleamBuf;
 use crate::protocol::{FrameDescriptor, FRAME_DESC_SIZE_BYTES};
@@ -30,7 +30,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
     }
 
     #[inline]
-    pub fn on_write(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
+    pub fn on_write(&mut self, rw_buff: &mut SleamBuf) -> IoResult<u32> {
         if self.pending_read == 0 {
             match &mut self.pending_buff {
                 Some(crt_write_buff) => match crt_write_buff.copy_to(&mut self.stream) {
@@ -51,7 +51,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
 
     #[inline]
 
-    pub fn on_read(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
+    pub fn on_read(&mut self, rw_buff: &mut SleamBuf) -> IoResult<u32> {
         assert!(!self.is_write_pending());
         if self.pending_read > 0 {
             //we must read in the connection's buffer
@@ -64,7 +64,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
                             if self.pending_read == 0 {
                                 assert!(crt_read_buff.write_available() == 0);
                                 self.service
-                                    .execute(&mut IoBuf::Separate(crt_read_buff, rw_buff));
+                                    .execute(&mut IoBuf::Splited(crt_read_buff, rw_buff));
                                 self.pending_buff = None;
                                 if self.send(rw_buff)? != 0 {
                                     return Ok(n); //write was incomplete so will need to try again
@@ -91,7 +91,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
                     Ok(n) => {
                         self.pending_read -= n;
                         if self.pending_read == 0 {
-                            self.service.execute(&mut IoBuf::Same(rw_buff));
+                            self.service.execute(&mut IoBuf::One(rw_buff));
                             if self.send(rw_buff)? != 0 {
                                 return Ok(n); //write was incomplete so will need to try again
                             }
@@ -109,7 +109,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
         }
     }
 
-    fn send(&mut self, rw_buff: &mut SleamBuf) -> Result<u32, Error> {
+    fn send(&mut self, rw_buff: &mut SleamBuf) -> IoResult<u32> {
         match rw_buff.copy_to(&mut self.stream) {
             Ok(_) => {
                 let left = rw_buff.len() as u32;
@@ -126,7 +126,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
     }
 
     #[inline]
-    fn read_message_length(&mut self) -> std::io::Result<u32> {
+    fn read_message_length(&mut self) -> IoResult<u32> {
         self.pending_read = 0;
         //frame delim 4 bytes metadata 4 bytes frame info
         let mut buf = [0u8; FRAME_DESC_SIZE_BYTES];
@@ -138,13 +138,21 @@ impl<'a, S: ReplService> Connection<'a, S> {
                     }
                     self.drain_header()?;
                     let descr = LittleEndian::read_u64(buf.as_ref());
-                    let frame_desc: FrameDescriptor =
-                        descr.try_into().map_err(|_err| ErrorKind::InvalidData)?;
-                    if !frame_desc.is_req() {
-                        return Err(ErrorKind::InvalidData.into());
+                    match FrameDescriptor::try_from(descr) {
+                        Ok(frame_desc) => {
+                            self.pending_read = frame_desc.len();
+                            if !frame_desc.is_req() {
+                                self.pending_read = 0;
+                                //we should sent a Remote error back
+                                return Err(ErrorKind::InvalidData.into());
+                            }
+                            return Ok(self.pending_read);
+                        }
+                        Err(_) => {
+                            //we should sent a Remote error back
+                            return Err(ErrorKind::InvalidData.into());
+                        }
                     }
-                    self.pending_read = frame_desc.len();
-                    return Ok(self.pending_read);
                 }
                 Err(err) => match err.kind() {
                     ErrorKind::WouldBlock => return Ok(0),
@@ -155,7 +163,7 @@ impl<'a, S: ReplService> Connection<'a, S> {
         }
     }
 
-    fn drain_header(&mut self) -> Result<(), Error> {
+    fn drain_header(&mut self) -> IoResult<()> {
         let header_size = FRAME_DESC_SIZE_BYTES as u64;
         let mut take = self.stream.by_ref().take(header_size);
         loop {
