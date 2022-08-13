@@ -2,7 +2,7 @@ mod pingpong;
 use dotenv::dotenv;
 use log::info;
 use pingpong::*;
-use slean::codec::{BincodeCodec, MsgPackCodec};
+use slean::codec::BincodeCodec;
 use slean::error::SleanResult;
 use slean::{repl::ReplServer, service::OneReplyService};
 fn pingpong(req: &PingReq) -> SleanResult<PongRepl> {

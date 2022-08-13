@@ -3,7 +3,7 @@ use dotenv::dotenv;
 use hdrhistogram::Histogram;
 
 use pingpong::*;
-use slean::codec::{BincodeCodec, MsgPackCodec};
+use slean::codec::BincodeCodec;
 use slean::req::block::BlockingSleamService;
 use std::time::{SystemTime, UNIX_EPOCH};
 
