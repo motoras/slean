@@ -2,10 +2,11 @@ mod pingpong;
 use dotenv::dotenv;
 use log::info;
 use pingpong::*;
+use slean::codec::{BincodeCodec, MsgPackCodec};
 use slean::error::SleanResult;
-use slean::{repl::ReplServer, service::SimpleReplyService};
-fn pingpong(req: PingReq) -> SleanResult<PongRepl> {
-    match req {
+use slean::{repl::ReplServer, service::OneReplyService};
+fn pingpong(req: &PingReq) -> SleanResult<PongRepl> {
+    match *req {
         PingReq::Ping(ts) => Ok(PongRepl::Pong(ts)),
     }
 }
@@ -22,7 +23,7 @@ fn main() {
 }
 
 fn run_server() {
-    let service = SimpleReplyService { worker: pingpong };
+    let service = OneReplyService::<BincodeCodec, _, _>::new(pingpong);
     let mut repl_server = ReplServer::new(service);
     info!("Starting the server");
     repl_server.server().unwrap();
