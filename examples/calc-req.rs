@@ -2,6 +2,7 @@ mod calc;
 use calc::*;
 use dotenv::dotenv;
 use log::debug;
+use slean::codec::MsgPackCodec;
 use slean::req::block::BlockingSleamService;
 
 fn main() {
@@ -17,7 +18,8 @@ fn main() {
 }
 
 fn run_client() {
-    let mut service = BlockingSleamService::<CalcRequest, CalcReply>::connect().unwrap();
+    let mut service =
+        BlockingSleamService::<MsgPackCodec, CalcRequest, CalcReply>::connect().unwrap();
 
     let add_req = CalcRequest::Add(5, 7);
     let mul_req = CalcRequest::Mul(5, 7);

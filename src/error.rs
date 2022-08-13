@@ -1,9 +1,8 @@
-use serde_derive::{Deserialize, Serialize};
 use std::io::Error as IoError;
 use thiserror::Error;
 
 pub type SleanResult<T> = Result<T, SleanError>;
-
+pub type RemoteError = (i32, String);
 #[derive(Error, Debug)]
 pub enum SleanError {
     #[error("Invalid header {0:X},")]
@@ -25,40 +24,17 @@ pub enum SleanError {
     AppError { code: i32, msg: String },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RemoteError {
-    err_code: i32,
-    err_msg: String,
-}
-
-impl RemoteError {
-    pub fn new(err_code: i32, err_msg: String) -> Self {
-        RemoteError { err_code, err_msg }
-    }
-    #[allow(dead_code)]
-    pub fn code(&self) -> i32 {
-        self.err_code
-    }
-    #[allow(dead_code)]
-    pub fn msg(&self) -> &str {
-        &self.err_msg
-    }
-}
-
 impl From<SleanError> for RemoteError {
-    fn from(sl_err: SleanError) -> Self {
-        match sl_err {
-            SleanError::InvalidFrameHeader(_) => RemoteError::new(1000, format!("{}", sl_err)),
-            SleanError::InvalidFrameLen(_) => RemoteError::new(1000, format!("{}", sl_err)),
-            SleanError::UnexpectedIoFailure(io_err) => {
-                RemoteError::new(1, io_err.kind().to_string())
-            }
-            SleanError::EncodingFailed(err_msg) => RemoteError::new(5000, err_msg),
-            SleanError::DecodingFailed(err_msg) => RemoteError::new(5100, err_msg),
-
+    fn from(s_err: SleanError) -> Self {
+        match s_err {
+            SleanError::InvalidFrameHeader(_) => (1000, format!("{}", s_err)),
+            SleanError::InvalidFrameLen(_) => (1000, format!("{}", s_err)),
+            SleanError::UnexpectedIoFailure(io_err) => (1, io_err.kind().to_string()),
+            SleanError::EncodingFailed(err_msg) => (5000, err_msg),
+            SleanError::DecodingFailed(err_msg) => (5100, err_msg),
             SleanError::AppError { code, msg } => {
                 assert!(code < 0);
-                RemoteError::new(code, msg)
+                (code, msg)
             }
         }
     }

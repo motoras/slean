@@ -143,13 +143,13 @@ impl<'a, S: ReplService> Connection<'a, S> {
                             self.pending_read = frame_desc.len();
                             if !frame_desc.is_req() {
                                 self.pending_read = 0;
-                                //we should sent a Remote error back
+                                //maybe we should sent a Remote error back before we close the door
                                 return Err(ErrorKind::InvalidData.into());
                             }
                             return Ok(self.pending_read);
                         }
                         Err(_) => {
-                            //we should sent a Remote error back
+                            //maybe we should sent a Remote error back before we close the door
                             return Err(ErrorKind::InvalidData.into());
                         }
                     }

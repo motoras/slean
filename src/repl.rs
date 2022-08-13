@@ -127,7 +127,7 @@ impl<RS: ReplService> ReplServer<RS> {
                             }
                         }
                         if event.is_readable() {
-                            info!("Got READ message from {:?}", &token);
+                            trace!("Got READ message from {:?}", &token);
                             match connections.get_mut(&token) {
                                 Some(conn) => {
                                     if !conn.is_write_pending() {
