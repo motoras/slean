@@ -12,7 +12,8 @@ pub struct SleamBuf {
 }
 
 impl SleamBuf {
-    pub fn alloc_for(len: u32, reserve: usize) -> Self {
+    #[inline]
+    pub fn alloc_and_reserve(len: u32, reserve: usize) -> Self {
         Self {
             data: SleamBuf::create_buffer(len + reserve as u32),
             read_pos: reserve,
@@ -20,8 +21,9 @@ impl SleamBuf {
         }
     }
 
+    #[inline]
     pub fn alloc(len: u32) -> Self {
-        Self::alloc_for(len, 0)
+        Self::alloc_and_reserve(len, 0)
     }
 
     //we may want to do this whithout transmute....
@@ -43,6 +45,7 @@ impl SleamBuf {
         }
     }
 
+    #[inline]
     pub fn commit(&mut self, msg_type: MsgType) {
         assert!(self.read_pos == FRAME_DESC_SIZE_BYTES);
         let msg_len = self.len() as u32;
@@ -140,7 +143,7 @@ impl SleamBuf {
 
 impl Default for SleamBuf {
     fn default() -> Self {
-        SleamBuf::alloc_for(MAX_MSG_SIZE_BYTES, FRAME_DESC_SIZE_BYTES)
+        SleamBuf::alloc_and_reserve(MAX_MSG_SIZE_BYTES, FRAME_DESC_SIZE_BYTES)
     }
 }
 
