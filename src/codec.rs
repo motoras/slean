@@ -24,8 +24,8 @@ impl Codec<String> for TextCodec {
 
     fn write(data: &String, writer: &mut impl Write) -> SleanResult<()> {
         writer
-            .write_all(&data.as_bytes())
-            .map_err(|err| SleanError::UnexpectedIoFailure(err))
+            .write_all(data.as_bytes())
+            .map_err(SleanError::UnexpectedIoFailure)
     }
 }
 
@@ -33,7 +33,7 @@ impl Codec<RemoteError> for TextCodec {
     fn read(reader: &mut impl Read) -> SleanResult<(i32, String)> {
         let code = reader
             .read_i32::<LittleEndian>()
-            .map_err(|err| SleanError::UnexpectedIoFailure(err))?;
+            .map_err(SleanError::UnexpectedIoFailure)?;
         let mut msg = String::new();
         reader.read_to_string(&mut msg)?;
         Ok((code, msg))
@@ -42,10 +42,10 @@ impl Codec<RemoteError> for TextCodec {
     fn write((code, msg): &RemoteError, writer: &mut impl Write) -> SleanResult<()> {
         writer
             .write_i32::<LittleEndian>(*code)
-            .map_err(|err| SleanError::UnexpectedIoFailure(err))?;
+            .map_err(SleanError::UnexpectedIoFailure)?;
         writer
-            .write_all(&msg.as_bytes())
-            .map_err(|err| SleanError::UnexpectedIoFailure(err))
+            .write_all(msg.as_bytes())
+            .map_err(SleanError::UnexpectedIoFailure)
     }
 }
 
