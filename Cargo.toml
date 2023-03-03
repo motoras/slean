@@ -26,6 +26,28 @@ ctrlc="3.2.2"
 hdrhistogram="7.5.0"
 
 
+[[example]]
+name = "echo-rq"
+path = "examples/echo/echo-req.rs"
+
+[[example]]
+name = "echo-rp"
+path = "examples/echo/echo-repl.rs"
 
 
+[[example]]
+name = "ping"
+path = "examples/ping/ping-req.rs"
 
+[[example]]
+name = "pong"
+path = "examples/ping/pong-repl.rs"
+
+
+[[example]]
+name = "calc-rq"
+path = "examples/calc/calc-req.rs"
+
+[[example]]
+name = "calc-rp"
+path = "examples/calc/calc-repl.rs"

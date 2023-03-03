@@ -9,7 +9,7 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     let mut handles = Vec::new();
-    for _i in 0..4 {
+    for _i in 0..128 {
         handles.push(std::thread::spawn(|| run_client()));
     }
     for handle in handles {

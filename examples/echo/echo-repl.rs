@@ -1,5 +1,3 @@
-mod calc;
-
 use dotenv::dotenv;
 use log::info;
 use slean::codec::TextCodec;
@@ -12,7 +10,7 @@ fn main() {
     dotenv().ok();
     env_logger::init();
     let mut handles = Vec::new();
-    for _i in 0..1 {
+    for _i in 0..8 {
         handles.push(std::thread::spawn(run_server));
     }
     for handle in handles {

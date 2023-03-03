@@ -24,9 +24,9 @@ pub(crate) struct FrameDescriptor {
 impl FrameDescriptor {
     pub(crate) fn build_desc(msg_type: MsgType, len: u32) -> u64 {
         match msg_type {
-            MsgType::Req => ((REQ << 60) | (len as u64)),
-            MsgType::Repl => ((REPL << 60) | (len as u64)),
-            MsgType::Err => ((ERR << 60) | (len as u64)),
+            MsgType::Req => (REQ << 60) | (len as u64),
+            MsgType::Repl => (REPL << 60) | (len as u64),
+            MsgType::Err => (ERR << 60) | (len as u64),
         }
     }
 
